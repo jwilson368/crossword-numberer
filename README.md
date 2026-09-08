@@ -45,6 +45,20 @@ It also reads from stdin, so it fits in a pipeline:
 $ xwnum < grid.txt
 ```
 
+Pass `-clues` to get a clue list instead of the numbered grid — each
+entry is the clue number and the word's length, grouped by direction:
+
+```sh
+$ xwnum -clues -in grid.txt
+Across
+1. 5
+3. 5
+4. 5
+Down
+1. 5
+2. 5
+```
+
 ## Why streaming matters here
 
 Numbering a cell needs to know about the row above it (to check for a

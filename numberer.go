@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -95,4 +96,129 @@ func StreamNumber(r io.Reader, w io.Writer, block byte) error {
 		emit(prev, curr, nil)
 	}
 	return nil
+}
+
+// Clue is one entry in a clue list: the number printed in the grid, and
+// how many cells the word occupies.
+type Clue struct {
+	Number int
+	Length int
+}
+
+// acrossLength counts the open cells starting at col and running right,
+// stopping at the first black square or the edge of the row.
+func acrossLength(row []bool, col int) int {
+	n := 0
+	for c := col; c < len(row) && row[c]; c++ {
+		n++
+	}
+	return n
+}
+
+// ListClues reads a crossword grid the same way StreamNumber does, but
+// instead of printing the numbered grid it returns the across and down
+// clue lists (number and word length). An across word's length is known
+// as soon as its row is read, but a down word's length isn't known until
+// the row where it ends, so this tracks one length-in-progress per
+// column rather than buffering the whole grid — memory stays proportional
+// to the grid's width, not its area.
+func ListClues(r io.Reader, block byte) (across, down []Clue, err error) {
+	scanner := bufio.NewScanner(r)
+
+	type downState struct {
+		number int
+		length int
+	}
+	active := map[int]*downState{}
+
+	var prev, curr []bool
+	haveCurr := false
+	counter := 0
+	lineNum := 0
+	width := -1
+
+	process := func(prevRow, currRow, nextRow []bool) {
+		for col, open := range currRow {
+			if !open {
+				if ds, ok := active[col]; ok {
+					down = append(down, Clue{ds.number, ds.length})
+					delete(active, col)
+				}
+				continue
+			}
+
+			leftBlocked := col == 0 || !currRow[col-1]
+			rightOpen := col+1 < len(currRow) && currRow[col+1]
+			startsAcross := leftBlocked && rightOpen
+
+			aboveBlocked := prevRow == nil || col >= len(prevRow) || !prevRow[col]
+			belowOpen := nextRow != nil && col < len(nextRow) && nextRow[col]
+			startsDown := aboveBlocked && belowOpen
+
+			if startsAcross || startsDown {
+				counter++
+			}
+			if startsAcross {
+				across = append(across, Clue{counter, acrossLength(currRow, col)})
+			}
+			switch {
+			case startsDown:
+				active[col] = &downState{number: counter, length: 1}
+			case active[col] != nil:
+				active[col].length++
+			}
+		}
+	}
+
+	for scanner.Scan() {
+		lineNum++
+		next := parseRow(scanner.Text(), block)
+		if width == -1 {
+			width = len(next)
+		} else if len(next) != width {
+			return nil, nil, fmt.Errorf("line %d: row width %d does not match grid width %d", lineNum, len(next), width)
+		}
+
+		if haveCurr {
+			process(prev, curr, next)
+			prev = curr
+		}
+		curr = next
+		haveCurr = true
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, nil, fmt.Errorf("reading grid: %w", err)
+	}
+	if haveCurr {
+		process(prev, curr, nil)
+	}
+
+	// Any down word still open when the grid ends (no trailing black
+	// square to close it) needs to be flushed. Walk columns in order so
+	// the result is deterministic rather than following map order.
+	for col := 0; col < width; col++ {
+		if ds, ok := active[col]; ok {
+			down = append(down, Clue{ds.number, ds.length})
+		}
+	}
+	sort.Slice(down, func(i, j int) bool { return down[i].Number < down[j].Number })
+
+	return across, down, nil
+}
+
+// WriteClueList prints across and down clue lists as "number. length"
+// under headers, the format most crossword clue lists use before the
+// clue text itself is filled in.
+func WriteClueList(w io.Writer, across, down []Clue) {
+	bw := bufio.NewWriter(w)
+	defer bw.Flush()
+
+	fmt.Fprintln(bw, "Across")
+	for _, c := range across {
+		fmt.Fprintf(bw, "%d. %d\n", c.Number, c.Length)
+	}
+	fmt.Fprintln(bw, "Down")
+	for _, c := range down {
+		fmt.Fprintf(bw, "%d. %d\n", c.Number, c.Length)
+	}
 }
