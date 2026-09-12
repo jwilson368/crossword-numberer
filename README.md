@@ -59,6 +59,30 @@ Down
 2. 5
 ```
 
+## Multiple grids
+
+A blank line separates one grid from the next, so a batch of puzzles
+can be numbered in a single pass:
+
+```sh
+$ xwnum <<'EOF'
+...
+.#.
+...
+
+....
+EOF
+1 . 2
+. # .
+3 . .
+
+1 . . .
+```
+
+Each grid's numbering starts back at 1. This only applies to the
+default numbered-grid output; `-clues` currently expects a single grid
+per run.
+
 ## Why streaming matters here
 
 Numbering a cell needs to know about the row above it (to check for a

@@ -41,11 +41,18 @@ func needsNumber(prev, curr, next []bool, col int) bool {
 	return startsAcross || startsDown
 }
 
-// StreamNumber reads a crossword grid one line at a time and writes the
-// numbered grid to w. Deciding whether a cell starts a down word needs
+// StreamNumber reads one or more crossword grids and writes the numbered
+// grid for each to w. Deciding whether a cell starts a down word needs
 // the row below it, so this holds at most three rows in memory at once
 // (above, current, below) rather than the whole grid — a grid with a
 // million rows costs the same handful of bytes as one with ten.
+//
+// A blank line ends the current grid and starts a new one, with its own
+// numbering starting back at 1. This lets a single stream carry a batch
+// of puzzles — say, a week of dailies concatenated together — without
+// the caller having to split them first. Runs of more than one blank
+// line are treated as a single separator, and leading or trailing blank
+// lines are ignored.
 func StreamNumber(r io.Reader, w io.Writer, block byte) error {
 	scanner := bufio.NewScanner(r)
 	bw := bufio.NewWriter(w)
@@ -56,6 +63,7 @@ func StreamNumber(r io.Reader, w io.Writer, block byte) error {
 	counter := 0
 	lineNum := 0
 	width := -1
+	needSeparator := false
 
 	emit := func(prevRow, currRow, nextRow []bool) {
 		parts := make([]string, len(currRow))
@@ -75,11 +83,30 @@ func StreamNumber(r io.Reader, w io.Writer, block byte) error {
 
 	for scanner.Scan() {
 		lineNum++
-		next := parseRow(scanner.Text(), block)
+		line := scanner.Text()
+
+		if line == "" {
+			if haveCurr {
+				emit(prev, curr, nil)
+				prev, curr = nil, nil
+				haveCurr = false
+				counter = 0
+				width = -1
+				needSeparator = true
+			}
+			continue
+		}
+
+		next := parseRow(line, block)
 		if width == -1 {
 			width = len(next)
 		} else if len(next) != width {
 			return fmt.Errorf("line %d: row width %d does not match grid width %d", lineNum, len(next), width)
+		}
+
+		if needSeparator {
+			fmt.Fprintln(bw)
+			needSeparator = false
 		}
 
 		if haveCurr {
