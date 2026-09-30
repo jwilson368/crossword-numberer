@@ -79,9 +79,8 @@ EOF
 1 . . .
 ```
 
-Each grid's numbering starts back at 1. This only applies to the
-default numbered-grid output; `-clues` currently expects a single grid
-per run.
+Each grid's numbering starts back at 1. `-clues` works the same way:
+each grid gets its own Across/Down lists, separated by a blank line.
 
 ## Why streaming matters here
 

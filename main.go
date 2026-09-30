@@ -31,12 +31,12 @@ func main() {
 	}
 
 	if *cluesFlag {
-		across, down, err := ListClues(in, (*blockFlag)[0])
+		grids, err := ListClues(in, (*blockFlag)[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "xwnum: %v\n", err)
 			os.Exit(1)
 		}
-		WriteClueList(os.Stdout, across, down)
+		WriteClueList(os.Stdout, grids)
 		return
 	}
 
